@@ -508,7 +508,8 @@ RunSCT <- function(obj,
                    join = F,
                    split = c(),
                    variable.features.n = 3000,
-                   clip.range = c()){
+                   clip.range = c(),
+                   res = c(0.8,2){
   
   DefaultAssay(obj) <- 'RNA'
   obj@reduction <- list()
@@ -548,7 +549,7 @@ RunSCT <- function(obj,
   
   obj <- obj %>% 
     FindNeighbors(reduction = "pca", dims = 1:pcs,nn.method = "rann") %>%
-    FindClusters( resolution = c(0.8,2)) %>%
+    FindClusters( resolution = res) %>%
     RunUMAP(reduction = "pca", dims = 1:pcs, reduction.name = "umap.pca",seed.use = 123)
   
   return(obj)
@@ -1270,5 +1271,6 @@ DEG_pipeline <- function(obj,
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
