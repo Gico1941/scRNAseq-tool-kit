@@ -511,7 +511,7 @@ RunSCT <- function(obj,
                    clip.range = c()){
   
   DefaultAssay(obj) <- 'RNA'
-  
+  obj@reduction <- list()
   if('SCT' %in% Assays(obj)){
     obj[['SCT']] <- NULL
   }
@@ -1270,4 +1270,5 @@ DEG_pipeline <- function(obj,
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
