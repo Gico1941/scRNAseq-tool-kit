@@ -1253,6 +1253,87 @@ DEG_pipeline <- function(obj,
     )}}
 
 
+                               
+GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
+                        height_factor=1,
+                        width_factor=1,
+                        GSEA_fdr_hold=0.1,
+                        fdr_top=20){
+  files <- list.files(GSEA_folder,pattern='gsea_report_for',recursive = T,full.names = T)
+  files <- data.frame(file_name=grep('.tsv',files,value = T))
+  files$ident <- lapply(files$file_name,function(x) str_sub(x,-17,-1)) %>% unlist() %>% invisible()
+  save_dirs <- files$file_name %>% dirname() %>% dirname()
+  
+  batch <- function(iden=files$ident[3],fl = files$file_name[3]){
+    print(paste0('Launch GSEA plot for ' ,dirname(files$file_name[files$ident==iden]) %>% basename() %>% unique()) )
+    data <- lapply(files$file_name[files$ident==iden],function(x) read.table(x,sep="\t",quot="",header = T)%>%invisible())
+    
+    data <- lapply(data, function(x){
+      x <- x %>% filter(`FDR.q.val` < GSEA_fdr_hold) 
+      x <- x[order(x$`FDR.q.val`),]
+      
+    } )
+    data <- rbind(data[[1]] %>% top_n(-10,data[[1]]$`FDR.q.val`),data[[2]] %>% top_n(-10,data[[2]]$`FDR.q.val`)) 
+    
+    plot <- function(dt=data){
+      if(nrow(dt)==0){
+        return('Skip empty data')
+      }
+      
+      dt$NAME <- gsub('_',' ',dt$NAME)
+      #dt$NAME <- lapply(dt$NAME,function(x) str_extract(x," .*")%>% tolower()) %>% unlist() 
+      
+      dt$NAME <- str_wrap(dt$NAME, width = 20,  indent = 2,whitespace_only = T)
+      #dt$NES <- abs(dt$NES)
+      dt$group <- ifelse(dt$NES > 0 ,'Up','Down')
+      dt$NAME <- factor(dt$NAME,levels = dt$NAME[order(dt$NES,decreasing = F)])
+      dt$`Set size` <- dt$SIZE
+      
+      p<-ggplot()+
+        geom_point(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,size=`Set size`,color=`FDR.q.val`))+
+        geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES)*0.9,y= NAME,fill=`FDR.q.val`),width = 0.45)+
+        
+        scale_color_gradientn(colors = c('#3270fa','#c8d7f8'),name = 'FDR.Down',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
+        scale_fill_gradientn(colors = c('#3270fa','#c8d7f8'),name = 'FDR.Down',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
+        
+        new_scale_fill()+
+        new_scale_color()+
+        
+        geom_point(data = dt[dt$group == 'Up',],aes(x=abs(NES),y= NAME,size=`Set size`,color=`FDR.q.val`))+
+        geom_col(data = dt[dt$group == 'Up',],aes(x=abs(NES)*0.9,y= NAME,fill=`FDR.q.val`),width = 0.45)+
+        scale_color_gradientn(colors = c('#f7373a','#efb8b8'),name = 'FDR.Up',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
+        scale_fill_gradientn(colors = c('#f7373a','#efb8b8'),name = 'FDR.Up',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
+
+        theme_bw()+
+        xlim(-0.2,max(abs(dt$NES)) * 1.1)+
+        geom_hline(yintercept = nrow(dt[dt$group == 'Down',]) + 0.5,linetype='dashed',)+
+        ylab(NULL)+
+        xlab('Absolute NES')+
+        ggtitle(basename(strsplit(dirname(fl),'.Gsea')[[1]][1]))+
+        theme(axis.text.y=element_text(size=10),
+              legend.key.size = unit(0.5, "cm"),
+              legend.key.height =  unit(0.5, "cm"),
+              legend.key.width =  unit(0.5, "cm"))
+      
+      png(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = 0.7*nrow(dt)*height_factor,width = 5*width_factor,units = 'in',res=800)
+      
+      print(p)
+      
+      dev.off()
+      
+      
+
+      #ggsave(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = max(7,0.3*nrow(dt))*height_factor,width = 4*width_factor)
+    }
+    
+    plot(data)
+    
+  }
+  lapply(1:nrow(files),function(x) try(batch(files$ident[x],files$file_name[x])))
+  return('GSEA plot finished ....')
+}
+
+
 
 
 # in development
@@ -1271,6 +1352,7 @@ DEG_pipeline <- function(obj,
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
