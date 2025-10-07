@@ -1198,7 +1198,7 @@ FindMks_Volcano <- function(DEG,
                             p_adj.hold = 0.01,
                             avg_lfc.hold = 0.5,
                             top_n_plot = 10){
-  EG$gene <- rownames(DEG)
+  DEG$gene <- rownames(DEG)
   DEG$group <- ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC > avg_lfc.hold,'Up',
                       ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC < -avg_lfc.hold,'Down',
                              'Stable'))
@@ -1387,6 +1387,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
