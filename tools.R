@@ -1194,6 +1194,41 @@ process_infercnv <- function(cnv_addr = cnv_objs_rds[[1]]){
 }
 
 
+FindMks_Volcano <- function(DEG,
+                            p_adj.hold = 0.01,
+                            avg_lfc.hold = 0.5,
+                            top_n_plot = 10){
+  EG$gene <- rownames(DEG)
+  DEG$group <- ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC > avg_lfc.hold,'Up',
+                      ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC < -avg_lfc.hold,'Down',
+                             'Stable'))
+  DEG$group <- factor(DEG$group,levels = c('Up','Stable','Down'))
+  
+  n = top_n_plot
+  
+  DEG$p_val_adj_z <- scale(DEG$p_val_adj)
+  DEG$avg_log2FC_z <- scale(DEG$avg_log2FC)  
+  DEG$dist <- DEG$p_val_adj_z**2 + DEG$avg_log2FC_z**2
+  
+  highlights <- rbind(DEG %>% filter(group=='Up') %>% top_n(n,dist),
+                      DEG %>% filter(group=='Down') %>% top_n(n,dist)) %>% rownames()
+  DEG$label <- NA
+  DEG[highlights,'label']  <- DEG[highlights,'gene'] 
+  
+  volcano <- ggplot(DEG,aes(x=avg_log2FC,y=-log10(p_val_adj),colour = group))+
+    geom_point()+
+    geom_hline(yintercept = -log10(p_adj.hold),linetype ='dashed',alpha=0.2)+
+    geom_vline(xintercept = c(-avg_lfc.hold,avg_lfc.hold),linetype ='dashed',alpha=0.2)+
+    geom_text_repel(max.overlaps = Inf,
+                    aes(label = label),show.legend = FALSE,size=2.5,colour='#2a2a2a')+
+    scale_color_manual(values = c('#f56969','grey','#69bbf5'))+
+    theme_bw()
+  return(volcano)
+}
+
+
+                               
+
 DEG_pipeline <- function(obj,
                          GSEA_installed_path = "E:/bioinfo/GSEA_4.3.2",
                          comparisons=c('Jak2 KO_IgG2a','Jak2 Nedd8 KO_IgG2a'),
@@ -1352,6 +1387,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
