@@ -83,6 +83,35 @@ pct_plot <- function(obj,
   
 }
 
+####### Downsampling before run DEG or avgerage expression comparison
+
+Prep_DEG_downsample <- function(obj=epi,
+                                mode='median',
+                                group.by='sample_id',
+                                exclude.outliers = T,
+                                cell.id='cell',
+                                remove.cutoff.pct = 0.2){
+  
+  
+  tab <- data.frame(obj@meta.data[,c(group.by,cell.id)]) 
+  colnames(tab) <- c('group.by','cell.id')
+  med <- median(tab$group.by %>% table())
+  
+  tab_downsmapled <- tab %>% group_by(group.by) %>% slice_sample(n = med,replace = F)
+  #tab_downsmapled$group.by %>% table()
+  
+  ### any sample less than 20% of the median will be excluded from DEG
+  if(exclude.outliers){
+    outliers <-  names(table(tab_downsmapled$group.by))[which(table(tab_downsmapled$group.by) < (med*remove.cutoff.pct))]
+    tab_downsmapled <- tab_downsmapled %>% filter(group.by %in% outliers == F)
+  }
+
+  return(obj %>% subset(obj@meta.data[,cell.id] %in% tab_downsmapled$cell.id))
+  
+}
+
+
+
 avg_heatmap <-function(obj=obj,
                        modules=names(signatures.mm),
                        group_by='sample_id',
@@ -1411,6 +1440,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
