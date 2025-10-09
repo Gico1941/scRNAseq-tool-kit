@@ -87,28 +87,42 @@ pct_plot <- function(obj,
 
 Prep_DEG_downsample <- function(obj=epi,
                                 mode='median',
-                                group.by='sample_id',
+                                group.id = 'group',
+                                sample_id = 'sample_id',
                                 exclude.outliers = T,
                                 cell.id='cell',
                                 remove.cutoff.pct = 0.2){
   
+  tab <- data.frame(obj@meta.data[,c(sample_id,cell.id,group.id)]) 
+  colnames(tab) <- c('sample_id','cell.id','group.id')
   
-  tab <- data.frame(obj@meta.data[,c(group.by,cell.id)]) 
-  colnames(tab) <- c('group.by','cell.id')
-  med <- median(tab$group.by %>% table())
+  med <- tab %>% count(sample_id, group.id) %>% group_by(group.id) %>% summarise(median=median(n))
+
+  tab_downsmapled <- lapply(unique(med$group.id),function(x) {
+    med.num <- med$median[med$group.id==x]
+    
+    tab.sub <- tab %>% filter(group.id == x) %>% group_by(sample_id) %>% 
+      slice_sample(n = as.integer(med.num) ,replace = F)
+    
+    if(exclude.outliers){
+      freq <- tab.sub %>% count(sample_id)
+      
+      outliers <-   freq$sample_id[which(freq$n < as.integer(med.num*remove.cutoff.pct))]
+      
+      tab.sub <- tab.sub %>% filter(sample_id %in% outliers == F)
+    }}
+    ) 
   
-  tab_downsmapled <- tab %>% group_by(group.by) %>% slice_sample(n = med,replace = F)
-  #tab_downsmapled$group.by %>% table()
+  tab_downsmapled <- do.call('rbind',tab_downsmapled)
+  #tab_downsmapled%>% count(sample_id, group.id)
   
   ### any sample less than 20% of the median will be excluded from DEG
-  if(exclude.outliers){
-    outliers <-  names(table(tab_downsmapled$group.by))[which(table(tab_downsmapled$group.by) < (med*remove.cutoff.pct))]
-    tab_downsmapled <- tab_downsmapled %>% filter(group.by %in% outliers == F)
-  }
 
-  return(obj %>% subset(obj@meta.data[,cell.id] %in% tab_downsmapled$cell.id))
-  
+  obj$cell.id <- obj@meta.data[,cell.id]
+
+  return(obj %>% subset(cell.id %in% tab_downsmapled$cell.id))
 }
+
 
 
 
@@ -1444,6 +1458,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
