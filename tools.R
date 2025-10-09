@@ -1289,11 +1289,18 @@ DEG_pipeline <- function(obj,
 
 
                                
+options(digits = 2)
+
 GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
                         height_factor=1,
                         width_factor=1,
                         GSEA_fdr_hold=0.1,
-                        fdr_top=20){
+                        fdr_top=20,
+                        pos_group = 1,
+                        min.fdr.display=10**-10){ ## if want to plot the comparison reversely specify pos_group = 2
+  
+  
+  
   files <- list.files(GSEA_folder,pattern='gsea_report_for',recursive = T,full.names = T)
   files <- data.frame(file_name=grep('.tsv',files,value = T))
   files$ident <- lapply(files$file_name,function(x) str_sub(x,-17,-1)) %>% unlist() %>% invisible()
@@ -1310,37 +1317,52 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
     } )
     data <- rbind(data[[1]] %>% top_n(-10,data[[1]]$`FDR.q.val`),data[[2]] %>% top_n(-10,data[[2]]$`FDR.q.val`)) 
     
+    if(pos_group == 2){
+      data$NES <- -data$NES
+    }
+    
     plot <- function(dt=data){
       if(nrow(dt)==0){
         return('Skip empty data')
       }
       
       dt$NAME <- gsub('_',' ',dt$NAME)
-      #dt$NAME <- lapply(dt$NAME,function(x) str_extract(x," .*")%>% tolower()) %>% unlist() 
+      dt$NAME <- lapply(dt$NAME,function(x) str_extract(x," .*")%>% tolower()) %>% unlist() 
       
-      dt$NAME <- str_wrap(dt$NAME, width = 20,  indent = 2,whitespace_only = T)
+      dt$NAME <- str_wrap(dt$NAME, width = 40,  indent = 2,whitespace_only = T)
       #dt$NES <- abs(dt$NES)
       dt$group <- ifelse(dt$NES > 0 ,'Up','Down')
       dt$NAME <- factor(dt$NAME,levels = dt$NAME[order(dt$NES,decreasing = F)])
       dt$`Set size` <- dt$SIZE
       
+      dt$`FDR.q.val` <- ifelse(dt$`FDR.q.val` == 0, dt$`FDR.q.val` + min(min.fdr.display,dt$`FDR.q.val`[dt$`FDR.q.val`!=0]),
+                               dt$`FDR.q.val`)
+      
       p<-ggplot()+
-        geom_point(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,size=`Set size`,color=`FDR.q.val`))+
-        geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES)*0.9,y= NAME,fill=`FDR.q.val`),width = 0.45)+
+        geom_point(data = dt[dt$group == 'Down',],aes(x=abs(NES)*1.2,y= NAME,size=`Set size`,color=-log10(`FDR.q.val`) ))+
+        geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,fill=-log10(`FDR.q.val`)),width = 0.45)+
         
-        scale_color_gradientn(colors = c('#3270fa','#c8d7f8'),name = 'FDR.Down',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
-        scale_fill_gradientn(colors = c('#3270fa','#c8d7f8'),name = 'FDR.Down',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
+        scale_color_gradientn(colors = c('#c8d7f8','#3270fa'),name = '-log10.FDR.Down',
+                              limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','FDR.q.val']))),
+                              breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','FDR.q.val']))))+
+        scale_fill_gradientn(colors = c('#c8d7f8','#3270fa'),name = '-log10.FDR.Down',
+                             limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','FDR.q.val']))),
+                             breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','FDR.q.val']))))+
         
         new_scale_fill()+
         new_scale_color()+
         
-        geom_point(data = dt[dt$group == 'Up',],aes(x=abs(NES),y= NAME,size=`Set size`,color=`FDR.q.val`))+
-        geom_col(data = dt[dt$group == 'Up',],aes(x=abs(NES)*0.9,y= NAME,fill=`FDR.q.val`),width = 0.45)+
-        scale_color_gradientn(colors = c('#f7373a','#efb8b8'),name = 'FDR.Up',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
-        scale_fill_gradientn(colors = c('#f7373a','#efb8b8'),name = 'FDR.Up',limits = c(0,GSEA_fdr_hold),breaks = c(0,GSEA_fdr_hold))+
+        geom_point(data = dt[dt$group == 'Up',],aes(x=abs(NES)*1.2,y= NAME,size=`Set size`,color=-log10(`FDR.q.val`)))+
+        geom_col(data = dt[dt$group == 'Up',],aes(x=abs(NES),y= NAME,fill=-log10(`FDR.q.val`)),width = 0.45)+
+        scale_color_gradientn(colors = c('#efb8b8','#f7373a'),name = '-log10.FDR.Up',
+                              limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','FDR.q.val']))),
+                              breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','FDR.q.val']))))+
+        scale_fill_gradientn(colors = c('#efb8b8','#f7373a'),name = '-log10.FDR.Up',
+                             limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','FDR.q.val']))),
+                             breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','FDR.q.val']))))+
 
         theme_bw()+
-        xlim(-0.2,max(abs(dt$NES)) * 1.1)+
+        xlim(-0.05,max(abs(dt$NES)) * 1.4)+
         geom_hline(yintercept = nrow(dt[dt$group == 'Down',]) + 0.5,linetype='dashed',)+
         ylab(NULL)+
         xlab('Absolute NES')+
@@ -1350,7 +1372,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
               legend.key.height =  unit(0.5, "cm"),
               legend.key.width =  unit(0.5, "cm"))
       
-      png(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = 0.7*nrow(dt)*height_factor,width = 5*width_factor,units = 'in',res=800)
+      png(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = max(5.6,0.3*nrow(dt))*height_factor,width = 5.5*width_factor,units = 'in',res=800)
       
       print(p)
       
@@ -1371,6 +1393,8 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 
 
 
+
+
 # in development
 # enrichR_bubble <- function(enrich_result){
 #   enrich_result$Gene_ratio <- lapply(enrich_result$Overlap,
@@ -1387,6 +1411,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
