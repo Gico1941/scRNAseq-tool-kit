@@ -1328,7 +1328,8 @@ DEG_pipeline <- function(obj,
       out_dir=GSEA_out_dir,
       GSEA_plots_number=30,
       collapse='Collapse'
-    )}}
+    )}
+GSEA_bubble_2(GSEA_out_dir)}
 
 
                                
@@ -1336,7 +1337,7 @@ options(digits = 2)
 
 
 GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
-                          p.value = c('NOM.p.val','FDR.q.val')[2],
+                          p.value = c('NOM.p.val','FDR.q.val')[1],
                         height_factor=1,
                         width_factor=1,
                         GSEA_fdr_hold=0.1,
@@ -1458,6 +1459,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
