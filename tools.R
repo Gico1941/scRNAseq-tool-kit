@@ -1270,8 +1270,8 @@ DEG_pipeline <- function(obj,
   mks <- filter(mks, pct.2 > 0.05 )
   
   #### if comparison name contain any non ASCII words convert them
-  comparisons <- comparisons   %>% str_replace_all('α','a')
-  
+  #comparisons <- comparisons   %>% str_replace_all('α','a')
+  comparisons <- comparisons %>% iconv("UTF-8", "ASCII", sub = "")
   
   
   DEG_out_dir.new <- paste0(DEG_out_dir,'/',paste0(comparisons,collapse = ' vs '))
@@ -1440,6 +1440,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
