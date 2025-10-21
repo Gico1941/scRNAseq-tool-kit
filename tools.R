@@ -1329,7 +1329,7 @@ DEG_pipeline <- function(obj,
       GSEA_plots_number=30,
       collapse='Collapse'
     )}
-GSEA_bubble_2(GSEA_out_dir)}
+GSEA_bubble_3(GSEA_out_dir)}
 
 
                                
@@ -1438,7 +1438,131 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
   lapply(1:nrow(files),function(x) try(batch(files$ident[x],files$file_name[x])))
   return('GSEA plot finished ....')
 }
+#############################
 
+########################################
+
+### similar as GSEA_bubble_2 but no bars included
+
+options(digits = 2)
+
+GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
+                          p.value = c('NOM.p.val','FDR.q.val')[1],
+                          height_factor=1,
+                          width_factor=1,
+                          GSEA_fdr_hold=0.1,
+                          topn=10,
+                          pos_group = 1,
+                          min.fdr.display='auto'){ ## if want to plot the comparison reversely specify pos_group = 2
+  
+  
+  
+  files <- list.files(GSEA_folder,pattern='gsea_report_for',recursive = T,full.names = T)
+  files <- data.frame(file_name=grep('.tsv',files,value = T))
+  files$ident <- lapply(files$file_name,function(x) str_sub(x,-17,-1)) %>% unlist() %>% invisible()
+  save_dirs <- files$file_name %>% dirname() %>% dirname()
+  
+  batch <- function(iden=files$ident[3],fl = files$file_name[3]){
+    print(paste0('Launch GSEA plot for ' ,dirname(files$file_name[files$ident==iden]) %>% basename() %>% unique()) )
+    data <- lapply(files$file_name[files$ident==iden],function(x) read.table(x,sep="\t",quot="",header = T)%>%invisible())
+    
+    data[[1]]$p_val <- data[[1]][,p.value]
+    data[[2]]$p_val <- data[[2]][,p.value]
+    
+    data <- lapply(data, function(x){
+      x <- x %>% filter(p_val < GSEA_fdr_hold) 
+      x <- x[order(x$p_val),]
+      
+    } )
+
+    dt <- rbind( top_n(data[[1]],topn,-p_val), top_n(data[[2]],topn,-p_val))  
+    
+    if(pos_group == 2){
+      dt$NES <- -dt$NES
+    }
+    
+    plot <- function(dt){
+      if(nrow(dt)==0){
+        return('Skip empty data')
+      }
+      
+      dt$NAME <- gsub('_',' ',dt$NAME)
+      dt$NAME <- lapply(dt$NAME,function(x) str_extract(x," .*")%>% tolower()) %>% unlist() 
+      
+      dt$NAME <- str_wrap(dt$NAME, width = 40,  indent = 2,whitespace_only = T)
+      #dt$NES <- abs(dt$NES)
+      dt$group <- ifelse(dt$NES > 0 ,'Up','Down')
+      dt$NAME <- factor(dt$NAME,levels = dt$NAME[order(dt$NES,decreasing = F)])
+      dt$`Set size` <- dt$SIZE
+      
+      if(min.fdr.display == 'auto'){
+        dt$p_val[which(dt$group == 'Up')] <- ifelse(dt$p_val[which(dt$group == 'Up')]  == 0, 
+                                                    dt$p_val[which(dt$group == 'Up')]  + 
+                                                      min(dt$p_val[which(dt$group == 'Up')][dt$p_val[which(dt$group == 'Up')] !=0]/10) %>% 
+                                                      max(10**-10),
+                                                    dt$p_val[which(dt$group == 'Up')] )
+        dt$p_val[which(dt$group == 'Down')] <- ifelse(dt$p_val[which(dt$group == 'Down')]  == 0, 
+                                                    dt$p_val[which(dt$group == 'Down')]  + 
+                                                      min(dt$p_val[which(dt$group == 'Down')][dt$p_val[which(dt$group == 'Down')] !=0]/10) %>% 
+                                                      max(10**-10),
+                                                    dt$p_val[which(dt$group == 'Down')] )
+      }else{
+        dt$p_val <- ifelse(dt$p_val == 0, dt$p_val + min(min.fdr.display,dt$p_val[dt$p_val!=0]),
+                           dt$p_val)
+      }
+      
+      
+      p<-ggplot()+
+        geom_point(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,size=`Set size`,color=-log10(p_val) ))+
+       # geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,fill=-log10(p_val)),width = 0.45)+
+        
+        scale_color_gradientn(colors = c('#c8d7f8','#3270fa'),name =  paste0('-log10.',p.value,'.Down'),
+                              limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))),
+                              breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))))+
+        scale_fill_gradientn(colors = c('#c8d7f8','#3270fa'),name =  paste0('-log10.',p.value,'.Down'),
+                             limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))),
+                             breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))))+
+        
+        new_scale_fill()+
+        new_scale_color()+
+        
+        geom_point(data = dt[dt$group == 'Up',],aes(x=abs(NES),y= NAME,size=`Set size`,color=-log10(p_val)))+
+        #geom_col(data = dt[dt$group == 'Up',],aes(x=abs(NES),y= NAME,fill=-log10(p_val)),width = 0.45)+
+        scale_color_gradientn(colors = c('#efb8b8','#f7373a'),name =  paste0('-log10.',p.value,'.Up'),
+                              limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))),
+                              breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))))+
+        scale_fill_gradientn(colors = c('#efb8b8','#f7373a'),name = paste0('-log10.',p.value,'.Up'),
+                             limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))),
+                             breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))))+
+        
+        theme_bw()+
+        xlim(min(abs(dt$NES))*0.9,max(abs(dt$NES)) * 1.1)+
+        geom_hline(yintercept = nrow(dt[dt$group == 'Down',]) + 0.5,linetype='dashed',)+
+        ylab(NULL)+
+        xlab('Absolute NES')+
+        ggtitle(basename(strsplit(dirname(fl),'.Gsea')[[1]][1]))+
+        theme(axis.text.y=element_text(size=10),
+              legend.key.size = unit(0.5, "cm"),
+              legend.key.height =  unit(0.5, "cm"),
+              legend.key.width =  unit(0.5, "cm"))
+      
+      png(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = max(5.6,0.3*nrow(dt))*height_factor,width = 5.5*width_factor,units = 'in',res=800)
+      
+      print(p)
+      
+      dev.off()
+      
+      
+      
+      #ggsave(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = max(7,0.3*nrow(dt))*height_factor,width = 4*width_factor)
+    }
+    
+    plot(dt)
+    
+  }
+  lapply(1:nrow(files),function(x) try(batch(files$ident[x],files$file_name[x])))
+  return('GSEA plot finished ....')
+}
 
 
 
@@ -1459,6 +1583,7 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
