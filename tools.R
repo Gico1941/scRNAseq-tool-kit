@@ -1446,6 +1446,9 @@ GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
 
 options(digits = 2)
 
+
+options(digits = 2)
+
 GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
                           p.value = c('NOM.p.val','FDR.q.val')[1],
                           height_factor=1,
@@ -1462,10 +1465,10 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
   files$ident <- lapply(files$file_name,function(x) str_sub(x,-17,-1)) %>% unlist() %>% invisible()
   save_dirs <- files$file_name %>% dirname() %>% dirname()
   
-  batch <- function(iden=files$ident[3],fl = files$file_name[3]){
+  batch <- function(iden=files$ident[3]){
     print(paste0('Launch GSEA plot for ' ,dirname(files$file_name[files$ident==iden]) %>% basename() %>% unique()) )
     data <- lapply(files$file_name[files$ident==iden],function(x) read.table(x,sep="\t",quot="",header = T)%>%invisible())
-    
+    fl <- files$file_name[files$ident==iden][1]
     data[[1]]$p_val <- data[[1]][,p.value]
     data[[2]]$p_val <- data[[2]][,p.value]
     
@@ -1496,16 +1499,28 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
       dt$`Set size` <- dt$SIZE
       
       if(min.fdr.display == 'auto'){
-        dt$p_val[which(dt$group == 'Up')] <- ifelse(dt$p_val[which(dt$group == 'Up')]  == 0, 
-                                                    dt$p_val[which(dt$group == 'Up')]  + 
-                                                      min(dt$p_val[which(dt$group == 'Up')][dt$p_val[which(dt$group == 'Up')] !=0]/10) %>% 
-                                                      max(10**-10),
-                                                    dt$p_val[which(dt$group == 'Up')] )
-        dt$p_val[which(dt$group == 'Down')] <- ifelse(dt$p_val[which(dt$group == 'Down')]  == 0, 
-                                                    dt$p_val[which(dt$group == 'Down')]  + 
-                                                      min(dt$p_val[which(dt$group == 'Down')][dt$p_val[which(dt$group == 'Down')] !=0]/10) %>% 
-                                                      max(10**-10),
-                                                    dt$p_val[which(dt$group == 'Down')] )
+        Up <- dt$p_val[which(dt$group == 'Up')]
+        if(length(Up) > 0){
+          if(length (which(Up != 0)) == 0){
+            dt$p_val[which(dt$group == 'Up')] <- 10 ** -10
+          }else{
+            dt$p_val[which(dt$group == 'Up')] <- ifelse(Up  == 0, 
+                                                        Up  + 
+                                                          min(Up[Up !=0]/10) %>% 
+                                                          max(10**-10),
+                                                        Up )
+          }}
+        Down <- dt$p_val[which(dt$group == 'Down')]
+        if(length(Down) > 0){
+          if(length (which(Down != 0)) == 0){
+            dt$p_val[which(dt$group == 'Down')] <- 10 ** -10
+          }else{
+            dt$p_val[which(dt$group == 'Down')] <- ifelse(Down  == 0, 
+                                                          Down  + 
+                                                          min(Down[Down !=0]/10) %>% 
+                                                          max(10**-10),
+                                                          Down )
+          }}
       }else{
         dt$p_val <- ifelse(dt$p_val == 0, dt$p_val + min(min.fdr.display,dt$p_val[dt$p_val!=0]),
                            dt$p_val)
@@ -1560,10 +1575,9 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
     plot(dt)
     
   }
-  lapply(1:nrow(files),function(x) try(batch(files$ident[x],files$file_name[x])))
+  lapply(unique(files$ident),function(x) try(batch(x)))
   return('GSEA plot finished ....')
 }
-
 
 
 
@@ -1583,6 +1597,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
