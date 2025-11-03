@@ -105,7 +105,7 @@ Prep_DEG_downsample <- function(obj=epi,
       slice_sample(n = as.integer(med.num) ,replace = F)
     
     if(exclude.outliers){
-      freq <- tab.sub %>% count(sample_id)
+      freq <- tab.sub %>% dplyr::count(sample_id)
       
       outliers <-   freq$sample_id[which(freq$n < as.integer(med.num*remove.cutoff.pct))]
       
@@ -1597,6 +1597,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
