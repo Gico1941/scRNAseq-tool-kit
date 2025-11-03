@@ -96,7 +96,7 @@ Prep_DEG_downsample <- function(obj=epi,
   tab <- data.frame(obj@meta.data[,c(sample_id,cell.id,group.id)]) 
   colnames(tab) <- c('sample_id','cell.id','group.id')
   
-  med <- tab %>% count(sample_id, group.id) %>% group_by(group.id) %>% summarise(median=median(n))
+  med <- tab %>% dplyr::count(sample_id, group.id) %>% group_by(group.id) %>% summarise(median=median(n))
 
   tab_downsmapled <- lapply(unique(med$group.id),function(x) {
     med.num <- med$median[med$group.id==x]
@@ -1597,6 +1597,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
