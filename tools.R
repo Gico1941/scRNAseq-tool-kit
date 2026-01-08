@@ -1261,8 +1261,8 @@ FindMks_Volcano <- function(DEG,
   if(show.tops){
     n = top_n_plot
     
-    DEG$p_val_adj_z <- rescale(DEG$p_val_adj,to=c(-1,1))
-    DEG$avg_log2FC_z <- rescale(DEG$avg_log2FC,to=c(-1,1))  
+    DEG$p_val_adj_z <- rescale(-log10(DEG$p_val_adj),to=c(0,1))
+    DEG$avg_log2FC_z <- rescale(DEG$avg_log2FC,to=c(-1,1)) 
     DEG$dist <- DEG$p_val_adj_z**2 + DEG$avg_log2FC_z**2
     
     highlights <- rbind(DEG %>% filter(group=='Up') %>% top_n(n,dist),
@@ -1616,6 +1616,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
