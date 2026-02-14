@@ -552,7 +552,7 @@ RunSCT <- function(obj,
                    split = c(),
                    variable.features.n = 3000,
                    clip.range = c(),
-                   res = c(0.8,2){
+                   res = c(0.8,2)){
   
   DefaultAssay(obj) <- 'RNA'
   obj@reduction <- list()
@@ -1616,6 +1616,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
