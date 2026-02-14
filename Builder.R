@@ -37,7 +37,7 @@ easyBuild <- function(force=F){
     }
     conda_install('celltypist',packages = 'celltypist',channel=c('anaconda','conda-forge','bioconda'))
     
-    installed_packs <- paste(py_list_packages()$package,py_list_packages()$version,sep = '==')  
+    installed_packs <- paste(py_list_packages('celltypist')$package,py_list_packages('celltypist')$version,sep = '==')  
     required_packs <- requirements$requirement[which(requirements$requirement %in% installed_packs == F)]
   
     conda_install('celltypist',packages = required_packs,channel=c('anaconda','conda-forge','r','bioconda'))
@@ -106,5 +106,6 @@ easyBuild <- function(force=F){
   GSEA_download()
   java_install()
   }
+
 
 
