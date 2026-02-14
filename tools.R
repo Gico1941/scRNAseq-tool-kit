@@ -808,14 +808,14 @@ get_average_expression <- function(obj=tnbc.tumor,
                                    reshape_for_ggplot = T,
                                    remove_outliers_by_group.by = T){
   
-  features <- features[which(features %in% Features(tnbc.tumor,assay = assay))]
+  features <- features[which(features %in% Features(obj,assay = assay))]
   
   avg_exp <- AverageExpression(obj,features = features,group.by=append(individual_labels,group.by),assays = assay)[[assay]] %>% as.data.frame()
   
   num <- 4+length(group.by)
   
   if(reshape_for_ggplot){
-    if(length(gene) != 1){
+    if(length(features) != 1){
       avg_exp$gene <- rownames(avg_exp)
     }else{
       avg_exp$gene <- features
@@ -1616,6 +1616,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
