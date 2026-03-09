@@ -162,7 +162,7 @@ RunDESeq2 <- function(obj,ident = 'group',
     res <- results(dds)
     result <- res %>% as.data.frame()
     
-    write.csv2(result,'_',paste0(prefix,paste0(comparison,collapse = '_'),'.csv'))
+    write.csv2(result,paste0(prefix,'_',paste0(comparison,collapse = '_'),'.csv'))
     
     png(paste0(prefix,'_',paste0(comparison,collapse = '_'),'.png'),width = 5,height = 4,units = 'in',res = 800)
     
@@ -180,6 +180,24 @@ RunDESeq2 <- function(obj,ident = 'group',
     return(result)
   }
 }
+
+
+# 
+# mks.ko <- lapply(cells,function(x){
+#   
+#   RunDESeq2(obj %>% subset(celltype ==x),ident = 'group',
+#             comparison = c('Irak3 KO_EO','Irak3 KO_PBS'),
+#             assay ='RNA',
+#             sample_id = 'sample_id',
+#             prefix = paste0('./DEseq2/ko eo vs ko pbs/',x))})
+
+
+
+
+
+
+
+
 ###################
 
 avg_heatmap <-function(obj=obj,
@@ -1672,6 +1690,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
