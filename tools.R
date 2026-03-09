@@ -123,8 +123,64 @@ Prep_DEG_downsample <- function(obj=epi,
   return(obj %>% subset(cell.id %in% tab_downsmapled$cell.id))
 }
 
+######## DESeq2 pseudo bulk analysis
 
+RunDESeq2 <- function(obj,ident = 'group',
+                      comparison = c(),
+                      assay ='RNA',
+                      sample_id = 'sample_id',
+                      prefix = '',
+                      top_n.label = 10,
+                      gene.highlight = c(),
+                      return.dt = T){
+  
 
+    Idents(obj) <- ident
+    obj$ident <- Idents(obj)
+    obj <- obj %>% subset(ident %in% comparison)
+    
+    exp <- AggregateExpression(obj,
+                               assays = assay,group.by = sample_id,
+                               normalization.method=NULL)[[assay]] %>% as.data.frame()
+    
+    meta <- unique(obj@meta.data[,c(ident,sample_id)])
+    
+    rownames(meta) <- meta[,sample_id]
+    colnames(exp) <- colnames(exp) %>% str_replace('-','_')
+    meta <- meta[colnames(exp),]
+    
+    dds <- DESeqDataSetFromMatrix(countData = exp,
+                                  colData = meta,
+                                  design = ~ group)
+    smallestGroupSize <- 3
+    keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+    dds <- dds[keep,]
+    
+    dds$group <- factor(dds$group, levels = comparison)
+    
+    dds <- DESeq(dds)
+    res <- results(dds)
+    result <- res %>% as.data.frame()
+    
+    write.csv2(result,'_',paste0(prefix,paste0(comparison,collapse = '_'),'.csv'))
+    
+    png(paste0(prefix,'_',paste0(comparison,collapse = '_'),'.png'),width = 5,height = 4,units = 'in',res = 800)
+    
+    p1 <- FindMks_Volcano(result,
+                    p_adj.hold = 0.05,
+                    avg_lfc.hold = 0.25,
+                    top_n_plot = top_n.label,
+                    gene.highlight = gene.highlight,
+                    log2fc = 'log2FoldChange',
+                    p_val = 'pvalue')
+    print(p1)
+    
+    dev.off()
+  if(return.dt){
+    return(result)
+  }
+}
+###################
 
 avg_heatmap <-function(obj=obj,
                        modules=names(signatures.mm),
@@ -1616,6 +1672,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
