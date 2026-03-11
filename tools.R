@@ -630,7 +630,7 @@ RunSCT <- function(obj,
   
   DefaultAssay(obj) <- 'RNA'
   obj@reduction <- list()
-  if('SCT' %in% Assays(obj)){
+  if('SCT' %in% cd4@assays %>% names()){
     obj[['SCT']] <- NULL
   }
   
@@ -1690,6 +1690,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
+
 
 
 
