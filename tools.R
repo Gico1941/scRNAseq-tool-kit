@@ -13,29 +13,81 @@ library(lattice)
 library(gprofiler2)
 library(CellChat)
 library(ggrepel)
+library(ggnewscale)
 #library(ComplexHeatmap)
 #library(ggpubr)
 #library(ggrepel)
 #library(glmGamPoi)
 library(harmony)
+library(splitstackshape)
 
 ######################
+Prep_DEG_downsample <- function(obj=epi,
+                                mode='median',
+                                group.id = 'group',
+                                sample_id = 'sample_id',
+                                exclude.outliers = T,
+                                cell.id='cell',
+                                remove.cutoff.pct = 0.2){
+  
+  tab <- data.frame(obj@meta.data[,c(sample_id,cell.id,group.id)]) 
+  colnames(tab) <- c('sample_id','cell.id','group.id')
+  
+  med <- tab %>% dplyr::count(sample_id, group.id) %>% group_by(group.id) %>% summarise(median=median(n))
+  
+  tab_downsmapled <- lapply(unique(med$group.id),function(x) {
+    med.num <- med$median[med$group.id==x]
+    
+    tab.sub <- tab %>% filter(group.id == x) %>% group_by(sample_id) %>% 
+      slice_sample(n = as.integer(med.num) ,replace = F)
+    
+    if(exclude.outliers){
+      freq <- tab.sub %>% dplyr::count(sample_id)
+      
+      outliers <-   freq$sample_id[which(freq$n < as.integer(med.num*remove.cutoff.pct))]
+      
+      tab.sub <- tab.sub %>% filter(sample_id %in% outliers == F)
+    }}
+  ) 
+  
+  tab_downsmapled <- do.call('rbind',tab_downsmapled)
+  #tab_downsmapled%>% count(sample_id, group.id)
+  
+  ### any sample less than 20% of the median will be excluded from DEG
+  
+  obj$cell.id <- obj@meta.data[,cell.id]
+  
+  return(obj %>% subset(cell.id %in% tab_downsmapled$cell.id))
+}
+
 pct_plot <- function(obj,
                      celltype = "celltype",
                      sample_id = 'sample_id',
                       group = 'group',
                      significance = 'p', ## or 'p.adj',
                      show.p.value = F,
-                     compare=NA){
+                     compare=NA,
+                     total.by = c(),
+                     wrap=T,
+                     nrow = 2){
   
+  ## if not specify total cell then take percentage from all avaliable cells
+  if(length(total.by) == 0){
+    c <- obj@meta.data[,c(celltype,group,sample_id)]  
+    colnames(c) <- c('celltype','group','sample_id')
+    
+    c <- c %>% group_by(group,sample_id,celltype) %>% summarise (n = n()) %>%
+      mutate(Freq = n / sum(n) * 100)
+  }else{
+    
+    c <- obj@meta.data[,c(celltype,group,sample_id,total.by)]  
+    colnames(c) <- c('celltype','group','sample_id','total cell n') 
+    
+    c <- c %>% group_by(group,sample_id,celltype,`total cell n`) %>% summarise (n = n()) %>%
+      mutate(Freq = n / `total cell n` * 100)
+    
+  }
   
-  
-  c <- obj@meta.data[,c(celltype,group,sample_id)]  
-  colnames(c) <- c('celltype','group','sample_id')
-  
-  
-  c <- c %>% group_by(group,sample_id,celltype) %>% summarise (n = n()) %>%
-    mutate(Freq = n / sum(n) * 100)
   
   
   c$celltype <- factor(c$celltype,levels = unique(c$celltype))
@@ -62,143 +114,49 @@ pct_plot <- function(obj,
   # Create a box plot
   bxp <- ggboxplot(
     c, x = 'celltype', y = "Freq", 
-    color = "group"
+    color = "group",outlier.shape = NA
   )
   
   # Add p-values onto the box plots
-  stat.test <- stat.test %>%
-    add_xy_position(x = 'celltype', dodge = 0.8) 
+
+
   
   signif <- ifelse(show.p.value,'',".signif")
 
-  
-  bxp +  
-    geom_point(aes(x=celltype,y=Freq,colour=group),
-               position = position_jitterdodge(jitter.width=0.2) ) + 
-    stat_pvalue_manual(
-      stat.test,  label = paste0(significance,signif),size = 3.5
-    ) # # Add 10% spaces between the p-value labels and the plot border
-  #   + scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
-  
-  
-}
+  if(wrap==T){
+    stat.test <- stat.test %>%  
+      add_xy_position(x = 'celltype',step.increase = 0)
+    
 
-####### Downsampling before run DEG or avgerage expression comparison
-
-Prep_DEG_downsample <- function(obj=epi,
-                                mode='median',
-                                group.id = 'group',
-                                sample_id = 'sample_id',
-                                exclude.outliers = T,
-                                cell.id='cell',
-                                remove.cutoff.pct = 0.2){
-  
-  tab <- data.frame(obj@meta.data[,c(sample_id,cell.id,group.id)]) 
-  colnames(tab) <- c('sample_id','cell.id','group.id')
-  
-  med <- tab %>% dplyr::count(sample_id, group.id) %>% group_by(group.id) %>% summarise(median=median(n))
-
-  tab_downsmapled <- lapply(unique(med$group.id),function(x) {
-    med.num <- med$median[med$group.id==x]
+    stat.test$xmin <- stat.test$xmin - stat.test$x + 1
+    stat.test$xmax <- stat.test$xmax - stat.test$x + 1
+    stat.test$x <- 1
+    #
+    bxp +  
+      geom_point(aes(x=celltype,y=Freq,colour=group),
+                 position = position_jitterdodge(jitter.width=0.2) ) + 
+      facet_wrap(~celltype,scales = "free",nrow = nrow)+
+      stat_pvalue_manual(
+        stat.test,  label = paste0(significance,signif),size = 3.5
+      )+ scale_y_continuous(expand = expansion(mult = c(0.1, 0.2)))
     
-    tab.sub <- tab %>% filter(group.id == x) %>% group_by(sample_id) %>% 
-      slice_sample(n = as.integer(med.num) ,replace = F)
+  }else{
     
-    if(exclude.outliers){
-      freq <- tab.sub %>% dplyr::count(sample_id)
-      
-      outliers <-   freq$sample_id[which(freq$n < as.integer(med.num*remove.cutoff.pct))]
-      
-      tab.sub <- tab.sub %>% filter(sample_id %in% outliers == F)
-    }}
-    ) 
-  
-  tab_downsmapled <- do.call('rbind',tab_downsmapled)
-  #tab_downsmapled%>% count(sample_id, group.id)
-  
-  ### any sample less than 20% of the median will be excluded from DEG
-
-  obj$cell.id <- obj@meta.data[,cell.id]
-
-  return(obj %>% subset(cell.id %in% tab_downsmapled$cell.id))
-}
-
-######## DESeq2 pseudo bulk analysis
-
-RunDESeq2 <- function(obj,ident = 'group',
-                      comparison = c(),
-                      assay ='RNA',
-                      sample_id = 'sample_id',
-                      prefix = '',
-                      top_n.label = 10,
-                      gene.highlight = c(),
-                      return.dt = T){
-  
-
-    Idents(obj) <- ident
-    obj$ident <- Idents(obj)
-    obj <- obj %>% subset(ident %in% comparison)
+    stat.test <- stat.test %>%
+      add_xy_position(x = 'celltype',dodge = 0.5) 
     
-    exp <- AggregateExpression(obj,
-                               assays = assay,group.by = sample_id,
-                               normalization.method=NULL)[[assay]] %>% as.data.frame()
+    bxp +  
+      geom_point(aes(x=celltype,y=Freq,colour=group),
+                 position = position_jitterdodge(jitter.width=0.2) ) + 
+      stat_pvalue_manual(
+        stat.test,  label = paste0(significance,signif),size = 3.5
+      ) # # Add 10% spaces between the p-value labels and the plot border 
+    #   + scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
     
-    meta <- unique(obj@meta.data[,c(ident,sample_id)])
-    
-    rownames(meta) <- meta[,sample_id]
-    colnames(exp) <- colnames(exp) %>% str_replace('-','_')
-    meta <- meta[colnames(exp),]
-    
-    dds <- DESeqDataSetFromMatrix(countData = exp,
-                                  colData = meta,
-                                  design = ~ group)
-    smallestGroupSize <- 3
-    keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
-    dds <- dds[keep,]
-    
-    dds$group <- factor(dds$group, levels = comparison)
-    
-    dds <- DESeq(dds)
-    res <- results(dds)
-    result <- res %>% as.data.frame()
-    
-    write.csv2(result,paste0(prefix,'_',paste0(comparison,collapse = '_'),'.csv'))
-    
-    png(paste0(prefix,'_',paste0(comparison,collapse = '_'),'.png'),width = 5,height = 4,units = 'in',res = 800)
-    
-    p1 <- FindMks_Volcano(result,
-                    p_adj.hold = 0.05,
-                    avg_lfc.hold = 0.25,
-                    top_n_plot = top_n.label,
-                    gene.highlight = gene.highlight,
-                    log2fc = 'log2FoldChange',
-                    p_val = 'pvalue')
-    print(p1)
-    
-    dev.off()
-  if(return.dt){
-    return(result)
   }
+ 
+  
 }
-
-
-# 
-# mks.ko <- lapply(cells,function(x){
-#   
-#   RunDESeq2(obj %>% subset(celltype ==x),ident = 'group',
-#             comparison = c('Irak3 KO_EO','Irak3 KO_PBS'),
-#             assay ='RNA',
-#             sample_id = 'sample_id',
-#             prefix = paste0('./DEseq2/ko eo vs ko pbs/',x))})
-
-
-
-
-
-
-
-
-###################
 
 avg_heatmap <-function(obj=obj,
                        modules=names(signatures.mm),
@@ -323,7 +281,72 @@ calculate_sig <- function(obj,signature,h2m_conversion=T,split.by=NULL,ctrl=100)
 }
 
 
-
+RunDESeq2 <- function(obj,ident = 'group',
+                      comparison = c(),
+                      assay ='RNA',
+                      sample_id = 'sample_id',
+                      prefix = '',
+                      min.count = 100,
+                      top_n.label = 10,
+                      gene.highlight = c(),
+                      return.dt = T,
+                      rnk.p_hold =0.25,
+                      rnk.fc_hold = 0.15){
+  
+  
+  Idents(obj) <- ident
+  obj$ident <- Idents(obj)
+  obj <- obj %>% subset(ident %in% comparison)
+  
+  exp <- AggregateExpression(obj,
+                             assays = assay,group.by = sample_id,
+                             normalization.method=NULL)[[assay]] %>% as.data.frame()
+  
+  meta <- unique(obj@meta.data[,c(ident,sample_id)])
+  
+  rownames(meta) <- meta[,sample_id]
+  colnames(exp) <- colnames(exp) %>% str_replace('-','_')
+  meta <- meta[colnames(exp),]
+  
+  dds <- DESeqDataSetFromMatrix(countData = exp,
+                                colData = meta,
+                                design = ~ group)
+  smallestGroupSize <- 3
+  keep <- rowSums(counts(dds) >= min.count) >= smallestGroupSize
+  dds <- dds[keep,]
+  
+  dds$group <- factor(dds$group, levels = comparison)
+  
+  dds <- DESeq(dds)
+  res <- results(dds)
+  result <- res %>% as.data.frame()
+  
+  write.csv2(result,paste0(prefix,'_',paste0(comparison,collapse = '_'),'.csv'))
+  
+  png(paste0(prefix,'_',paste0(comparison,collapse = '_'),'.png'),width = 5,height = 4,units = 'in',res = 800)
+  
+  result <- result %>% filter(is.na(pvalue) == F)
+  p1 <- FindMks_Volcano(result,
+                        p_adj.hold = 0.05,
+                        avg_lfc.hold = 0.25,
+                        top_n_plot = top_n.label,
+                        gene.highlight = gene.highlight,
+                        log2fc = 'log2FoldChange',
+                        p_val = 'pvalue')
+  print(p1)
+  
+ 
+  DEG2RNK(result,p_hold = rnk.p_hold,log2fc_hold= rnk.fc_hold,
+          name = paste0(prefix,'_',paste0(comparison,collapse = '_'),'.rnk'),
+          FC.name='log2FoldChange',
+          P.val.name ='pvalue')
+  
+  
+  dev.off()
+  if(return.dt){
+    return(result)
+  }
+}
 
 
 
@@ -623,14 +646,14 @@ Identify_doublets <- function(obj,resolution = 0.3,sct = F){
 RunSCT <- function(obj,
                    vars.to.regress=c(),
                    join = F,
+                   pcs = F,
                    split = c(),
                    variable.features.n = 3000,
-                   clip.range = c(),
-                   res = c(0.8,2)){
+                   clip.range = c(),res=c(0.8,2)){
   
   DefaultAssay(obj) <- 'RNA'
-  obj@reduction <- list()
-  if('SCT' %in% obj@assays %>% names()){
+  obj@reductions <- list()
+  if('SCT' %in% names(obj@assays)){
     obj[['SCT']] <- NULL
   }
   
@@ -660,7 +683,10 @@ RunSCT <- function(obj,
   obj <- obj %>%
     RunPCA(assay = "SCT", npcs = 50)
   
-  pcs <- find_optimal_pcs(obj) + 15
+  if(!pcs){
+    pcs <- find_optimal_pcs(obj) + 15
+  }
+ 
   
   obj <- PrepSCTFindMarkers(obj)
   
@@ -739,25 +765,25 @@ cell_cycle_score <- function(obj,species = 'hs'){
 }
 
 
-DEG2RNK <- function(DEG,p_hold , log2fc_hold ,name){
+DEG2RNK <- function(DEG,p_hold , log2fc_hold ,name,
+                    FC.name='avg_log2FC',
+                    P.val.name = 'p_val_adj'){
   
   
-  up <- DEG[which((DEG$avg_log2FC > 0)  & (abs(DEG$avg_log2FC) > log2fc_hold) & (DEG$p_val_adj < p_hold)) ,]
+  up <- DEG[which((DEG[,FC.name] > 0)  & (abs(DEG[,FC.name]) > log2fc_hold) & (DEG[,P.val.name] < p_hold)) ,]
   
-  down <- DEG[which ((DEG$avg_log2FC < 0) & (abs(DEG$avg_log2FC) > log2fc_hold) & (DEG$p_val_adj < p_hold)) ,]
+  down <- DEG[which ((DEG[,FC.name] < 0) & (abs(DEG[,FC.name]) > log2fc_hold) & (DEG[,P.val.name]< p_hold)) ,]
   
   
-  up <- up[order(up$avg_log2FC,decreasing = T),]
+  up <- up[order(up[,FC.name],decreasing = T),]
   
-  down <- down[order(down$avg_log2FC,decreasing = F),]
+  down <- down[order(down[,FC.name],decreasing = F),]
   
   DEG <- rbind(up,down)
   
-  rnk <- DEG[order(DEG$avg_log2FC,decreasing = T),]
+  rnk <- DEG[order(DEG[,FC.name],decreasing = T),]
   
-  write_tsv(data.frame(row=rownames(rnk),log2fc=rnk[,'avg_log2FC']) ,paste0(name,'.rnk'),col_names = F)
-  
-  
+  write_tsv(data.frame(row=rownames(rnk),log2fc=rnk[,FC.name]) ,paste0(name,'.rnk'),col_names = F)
   
 }
 
@@ -932,6 +958,7 @@ Run_cellchat <- function(SeuratObj = sub_obj,
                          ccDB = CellChatDB.human,
                          search = 'Cell-Cell Contact',
                          smooth = PPI.human,
+                         mice2human = F,
                          spatial.coord=NULL){
   
   if(is.null(manual_dt) ){
@@ -954,6 +981,14 @@ Run_cellchat <- function(SeuratObj = sub_obj,
     meta <- manual_meta
   }
   
+  if(mice2human == T){
+    
+    new.gene <- gene.mm.to.hs(rownames(dt))
+    new.gene <- new.gene[!duplicated(new.gene$gene.mm),]
+    dt <- dt[which(!is.na(new.gene$hs.gene)),]
+    rownames(dt) <- new.gene$hs.gene %>% na.omit()
+    
+  }
   
   
   if(length(spatial.coord) == 0){
@@ -1167,7 +1202,55 @@ GSEA_bubble <- function(GSEA_folder='GSEA',
   return('GSEA plot finished ....')
 }
 
-
+FindMks_Volcano <- function(DEG,
+                            p_adj.hold = 0.01,
+                            avg_lfc.hold = 0.5,
+                            top_n_plot = 10,
+                            gene.highlight = '',
+                            log2fc = 'avg_log2FC',
+                            p_val = 'p_val_adj',
+                            show.tops=T){
+  
+  DEG$avg_log2FC <- DEG[[log2fc]]
+  DEG$p_val_adj <- DEG[[p_val]]
+  
+  
+  DEG$gene <- rownames(DEG)
+  DEG$group <- ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC > avg_lfc.hold,'Up',
+                      ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC < -avg_lfc.hold,'Down',
+                             'Stable'))
+  DEG$group <- factor(DEG$group,levels = c('Up','Stable','Down'))
+  DEG$label <- NA
+  if(show.tops){
+    n = top_n_plot
+    
+    DEG$p_val_adj_z <- rescale(-log10(DEG$p_val_adj),to=c(0,1))
+    DEG$avg_log2FC_z <- rescale(DEG$avg_log2FC,to=c(-1,1)) 
+    DEG$dist <- DEG$p_val_adj_z**2 + DEG$avg_log2FC_z**2
+    
+    highlights <- rbind(DEG %>% filter(group=='Up') %>% top_n(n,dist),
+                        DEG %>% filter(group=='Down') %>% top_n(n,dist)) %>% rownames()
+    
+    DEG[highlights,'label']  <- DEG[highlights,'gene'] 
+  }
+  
+  
+  if(length(gene.highlight) >0){
+    DEG[gene.highlight,'label'] <- gene.highlight
+  }
+  
+  
+  volcano <- ggplot(DEG,aes(x=avg_log2FC,y=-log10(p_val_adj),colour = group))+
+    geom_point()+
+    geom_hline(yintercept = -log10(p_adj.hold),linetype ='dashed',alpha=0.2)+
+    geom_vline(xintercept = c(-avg_lfc.hold,avg_lfc.hold),linetype ='dashed',alpha=0.2)+
+    geom_text_repel( data = DEG[is.na(DEG$label) == F,],mapping = aes(x=avg_log2FC,y=-log10(p_val_adj),label = label),
+                    max.overlaps = Inf,inherit.aes = F,
+                    colour='#2a2a2a',show.legend = FALSE,size=2.5,min.segment.length = 0)+
+    scale_color_manual(values = c('#f56969','grey','#69bbf5'))+
+    theme_bw()
+  return(volcano)
+}
 
 
 volcano <- function(DEG_path='DEG',
@@ -1183,10 +1266,7 @@ volcano <- function(DEG_path='DEG',
     return('Plot failed, avaliable highlight_top_by options : p_val_adj,avg_log2FC')
   }
   
-  folders <- list.dirs(DEG_path,recursive = F)
-  
-  
-  
+  #folders <- DEG_path
   
   batch <- function(path=folders[2]){
     csv_file <- list.files(path,recursive=T,pattern = '.csv',full.names = T)
@@ -1263,7 +1343,8 @@ volcano <- function(DEG_path='DEG',
     
     return('Volcano plot Complete\n')}
   
-  for (i in folders){cat(paste0(batch(i),'\n'))}
+  #for (i in DEG_path){cat(paste0(batch(i),'\n'))}
+  cat(paste0(batch(DEG_path),'\n'))
 }
 
 
@@ -1311,74 +1392,21 @@ process_infercnv <- function(cnv_addr = cnv_objs_rds[[1]]){
 }
 
 
-
-
-FindMks_Volcano <- function(DEG,
-                            p_adj.hold = 0.01,
-                            avg_lfc.hold = 0.5,
-                            top_n_plot = 10,
-                            gene.highlight = '',
-                            log2fc = 'avg_log2FC',
-                            p_val = 'p_val_adj',
-                            show.tops=T){
-  
-  DEG$avg_log2FC <- DEG[[log2fc]]
-  DEG$p_val_adj <- DEG[[p_val]]
-
-  
-  DEG$gene <- rownames(DEG)
-  DEG$group <- ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC > avg_lfc.hold,'Up',
-                      ifelse(DEG$p_val_adj < p_adj.hold & DEG$avg_log2FC < -avg_lfc.hold,'Down',
-                             'Stable'))
-  DEG$group <- factor(DEG$group,levels = c('Up','Stable','Down'))
-  DEG$label <- NA
-  if(show.tops){
-    n = top_n_plot
-    
-    DEG$p_val_adj_z <- rescale(-log10(DEG$p_val_adj),to=c(0,1))
-    DEG$avg_log2FC_z <- rescale(DEG$avg_log2FC,to=c(-1,1)) 
-    DEG$dist <- DEG$p_val_adj_z**2 + DEG$avg_log2FC_z**2
-    
-    highlights <- rbind(DEG %>% filter(group=='Up') %>% top_n(n,dist),
-                        DEG %>% filter(group=='Down') %>% top_n(n,dist)) %>% rownames()
-
-    DEG[highlights,'label']  <- DEG[highlights,'gene'] 
-  }
- 
-  
-  if(length(gene.highlight) >0){
-    DEG[gene.highlight,'label'] <- gene.highlight
-  }
-
-  
-  volcano <- ggplot(DEG,aes(x=avg_log2FC,y=-log10(p_val_adj),colour = group))+
-    geom_point()+
-    geom_hline(yintercept = -log10(p_adj.hold),linetype ='dashed',alpha=0.2)+
-    geom_vline(xintercept = c(-avg_lfc.hold,avg_lfc.hold),linetype ='dashed',alpha=0.2)+
-    geom_text_repel(max.overlaps = Inf,
-                    aes(label = label),show.legend = FALSE,size=2.5,colour='#2a2a2a',min.segment.length = 0)+
-    scale_color_manual(values = c('#f56969','grey','#69bbf5'))+
-    theme_bw()
-  return(volcano)
-}
-
-
-                               
-
 DEG_pipeline <- function(obj,
                          GSEA_installed_path = "E:/bioinfo/GSEA_4.3.2",
                          comparisons=c('Jak2 KO_IgG2a','Jak2 Nedd8 KO_IgG2a'),
                          DEG_out_dir = 'tumor analysis/DEG',
                          GSEA_out_dir = 'tumor analysis/GSEA',
-                         species = 'mouse' ### mouse or human
+                         species = 'mouse', ### mouse or human,
+                         recorrect_umi = F #if data from subset need to set T
                          ){
   
-  mks <- FindMarkers(obj,ident.1 = comparisons[1],ident.2 = comparisons[2])
-  mks <- filter(mks, pct.2 > 0.05 )
+  mks <- FindMarkers(obj,ident.1 = comparisons[1],ident.2 = comparisons[2],recorrect_umi=recorrect_umi)
+  mks <- filter(mks, pct.1 > 0.05 )
   
   #### if comparison name contain any non ASCII words convert them
-  #comparisons <- comparisons   %>% str_replace_all('α','a')
-  comparisons <- comparisons %>% iconv("UTF-8", "ASCII", sub = "")
+  comparisons <- comparisons   %>% str_replace_all('α','a')
+  
   
   
   DEG_out_dir.new <- paste0(DEG_out_dir,'/',paste0(comparisons,collapse = ' vs '))
@@ -1392,10 +1420,10 @@ DEG_pipeline <- function(obj,
   csv_name <- paste0(DEG_out_dir.new,'/',paste0(comparisons,collapse = ' vs '),'.csv')
   write.csv2(mks,csv_name)
   
-  volcano(DEG_out_dir,p_hold = 0.01,log2_fc_hold = 0.4)
+  volcano(DEG_out_dir.new,p_hold = 0.01,log2_fc_hold = 0.4)
   
   mks_sig <- filter(mks, abs(avg_log2FC) > 0.3 & p_val_adj < 0.01)
-  DEG2RNK(mks_sig,csv_name %>% str_remove('.csv'),log2fc_hold = 0.3 ,p_hold = 0.01)
+  DEG2RNK(mks_sig,csv_name %>% str_remove('.csv'),log2fc_hold = 0,p_hold = 1)
   
   if(species == 'mouse'){
     GSEA_batch.rnk(
@@ -1422,125 +1450,14 @@ DEG_pipeline <- function(obj,
       GSEA_plots_number=30,
       collapse='Collapse'
     )}
-GSEA_bubble_3(GSEA_out_dir)}
-
-
-                               
-options(digits = 2)
-
-
-GSEA_bubble_2 <- function(GSEA_folder='./Tumor cell/GSEA',
-                          p.value = c('NOM.p.val','FDR.q.val')[1],
-                        height_factor=1,
-                        width_factor=1,
-                        GSEA_fdr_hold=0.1,
-                        topn=20,
-                        pos_group = 1,
-                        min.fdr.display=10**-10){ ## if want to plot the comparison reversely specify pos_group = 2
   
-  
-  
-  files <- list.files(GSEA_folder,pattern='gsea_report_for',recursive = T,full.names = T)
-  files <- data.frame(file_name=grep('.tsv',files,value = T))
-  files$ident <- lapply(files$file_name,function(x) str_sub(x,-17,-1)) %>% unlist() %>% invisible()
-  save_dirs <- files$file_name %>% dirname() %>% dirname()
-  
-  batch <- function(iden=files$ident[3],fl = files$file_name[3]){
-    print(paste0('Launch GSEA plot for ' ,dirname(files$file_name[files$ident==iden]) %>% basename() %>% unique()) )
-    data <- lapply(files$file_name[files$ident==iden],function(x) read.table(x,sep="\t",quot="",header = T)%>%invisible())
-    
-    data[[1]]$p_val <- data[[1]][,p.value]
-    data[[2]]$p_val <- data[[2]][,p.value]
-    
-    data <- lapply(data, function(x){
-      x <- x %>% filter(p_val < GSEA_fdr_hold) 
-      x <- x[order(x$p_val),]
-      
-    } )
-    data <- rbind(data[[1]] %>% top_n(topn,-data[[1]]$p_val),data[[2]] %>% top_n(topn,-data[[2]]$p_val)) 
-    
-    if(pos_group == 2){
-      data$NES <- -data$NES
-    }
-    
-    plot <- function(dt=data){
-      if(nrow(dt)==0){
-        return('Skip empty data')
-      }
-      
-      dt$NAME <- gsub('_',' ',dt$NAME)
-      dt$NAME <- lapply(dt$NAME,function(x) str_extract(x," .*")%>% tolower()) %>% unlist() 
-      
-      dt$NAME <- str_wrap(dt$NAME, width = 40,  indent = 2,whitespace_only = T)
-      #dt$NES <- abs(dt$NES)
-      dt$group <- ifelse(dt$NES > 0 ,'Up','Down')
-      dt$NAME <- factor(dt$NAME,levels = dt$NAME[order(dt$NES,decreasing = F)])
-      dt$`Set size` <- dt$SIZE
-      
-      dt$p_val <- ifelse(dt$p_val == 0, dt$p_val + min(min.fdr.display,dt$p_val[dt$p_val!=0]),
-                               dt$p_val)
-      
-      p<-ggplot()+
-        geom_point(data = dt[dt$group == 'Down',],aes(x=abs(NES)*1.2,y= NAME,size=`Set size`,color=-log10(p_val) ))+
-        geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,fill=-log10(p_val)),width = 0.45)+
-        
-        scale_color_gradientn(colors = c('#c8d7f8','#3270fa'),name =  paste0('-log10.',p.value,'.Down'),
-                              limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))),
-                              breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))))+
-        scale_fill_gradientn(colors = c('#c8d7f8','#3270fa'),name =  paste0('-log10.',p.value,'.Down'),
-                             limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))),
-                             breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))))+
-        
-        new_scale_fill()+
-        new_scale_color()+
-        
-        geom_point(data = dt[dt$group == 'Up',],aes(x=abs(NES)*1.2,y= NAME,size=`Set size`,color=-log10(p_val)))+
-        geom_col(data = dt[dt$group == 'Up',],aes(x=abs(NES),y= NAME,fill=-log10(p_val)),width = 0.45)+
-        scale_color_gradientn(colors = c('#efb8b8','#f7373a'),name =  paste0('-log10.',p.value,'.Up'),
-                              limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))),
-                              breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))))+
-        scale_fill_gradientn(colors = c('#efb8b8','#f7373a'),name = paste0('-log10.',p.value,'.Up'),
-                             limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))),
-                             breaks = c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Up','p_val']))))+
-
-        theme_bw()+
-        xlim(-0.05,max(abs(dt$NES)) * 1.4)+
-        geom_hline(yintercept = nrow(dt[dt$group == 'Down',]) + 0.5,linetype='dashed',)+
-        ylab(NULL)+
-        xlab('Absolute NES')+
-        ggtitle(basename(strsplit(dirname(fl),'.Gsea')[[1]][1]))+
-        theme(axis.text.y=element_text(size=10),
-              legend.key.size = unit(0.5, "cm"),
-              legend.key.height =  unit(0.5, "cm"),
-              legend.key.width =  unit(0.5, "cm"))
-      
-      png(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = max(5.6,0.3*nrow(dt))*height_factor,width = 5.5*width_factor,units = 'in',res=800)
-      
-      print(p)
-      
-      dev.off()
-      
-      
-
-      #ggsave(paste0(strsplit(dirname(fl),'.Gsea')[[1]][1],'.png'),height = max(7,0.3*nrow(dt))*height_factor,width = 4*width_factor)
-    }
-    
-    plot(data)
-    
+  GSEA_bubble(GSEA_out_dir)
   }
-  lapply(1:nrow(files),function(x) try(batch(files$ident[x],files$file_name[x])))
-  return('GSEA plot finished ....')
-}
-#############################
-
-########################################
-
-### similar as GSEA_bubble_2 but no bars included
-
-options(digits = 2)
 
 
-options(digits = 2)
+
+
+
 
 GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
                           p.value = c('NOM.p.val','FDR.q.val')[1],
@@ -1570,7 +1487,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
       x <- x[order(x$p_val),]
       
     } )
-
+    
     dt <- rbind( top_n(data[[1]],topn,-p_val), top_n(data[[2]],topn,-p_val))  
     
     if(pos_group == 2){
@@ -1610,8 +1527,8 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
           }else{
             dt$p_val[which(dt$group == 'Down')] <- ifelse(Down  == 0, 
                                                           Down  + 
-                                                          min(Down[Down !=0]/10) %>% 
-                                                          max(10**-10),
+                                                            min(Down[Down !=0]/10) %>% 
+                                                            max(10**-10),
                                                           Down )
           }}
       }else{
@@ -1622,7 +1539,7 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
       
       p<-ggplot()+
         geom_point(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,size=`Set size`,color=-log10(p_val) ))+
-       # geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,fill=-log10(p_val)),width = 0.45)+
+        # geom_col(data = dt[dt$group == 'Down',],aes(x=abs(NES),y= NAME,fill=-log10(p_val)),width = 0.45)+
         
         scale_color_gradientn(colors = c('#c8d7f8','#3270fa'),name =  paste0('-log10.',p.value,'.Down'),
                               limits =  c(-log10(GSEA_fdr_hold),-log10(min(dt[dt$group == 'Down','p_val']))),
@@ -1673,7 +1590,6 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 }
 
 
-
 # in development
 # enrichR_bubble <- function(enrich_result){
 #   enrich_result$Gene_ratio <- lapply(enrich_result$Overlap,
@@ -1690,27 +1606,3 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 ## RUN RCTD
 ## Calculate co-Localization
 ## Calculate infiltration 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
