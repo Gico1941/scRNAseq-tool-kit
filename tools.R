@@ -291,17 +291,29 @@ RunDESeq2 <- function(obj,ident = 'group',
                       gene.highlight = c(),
                       return.dt = T,
                       rnk.p_hold =0.25,
-                      rnk.fc_hold = 0.15){
+                      rnk.fc_hold = 0.15,
+                      pct.1=0.01,
+                      pct.2=0.05){
   
   
   Idents(obj) <- ident
   obj$ident <- Idents(obj)
   obj <- obj %>% subset(ident %in% comparison)
   
+  ### 2 is what is compared to the reference
+  pct_cluster <- sapply(comparison, function(x){
+    cells <- WhichCells(obj, idents = x)
+    rowSums(x = GetAssayData(obj[,cells],assay = 'RNA',slot = 'count') > 0) / length(cells)
+  })
+  
+  genes.keep <- pct_cluster[pct_cluster[,1] > pct.1 & pct_cluster[,2] > pct.2,] %>% rownames()
+
   exp <- AggregateExpression(obj,
                              assays = assay,group.by = sample_id,
                              normalization.method=NULL)[[assay]] %>% as.data.frame()
   
+  
+  exp <- exp[intersect(rownames(exp),genes.keep),]
   meta <- unique(obj@meta.data[,c(ident,sample_id)])
   
   rownames(meta) <- meta[,sample_id]
@@ -1605,4 +1617,5 @@ GSEA_bubble_3 <- function(GSEA_folder='./Tumor cell/GSEA',
 
 ## RUN RCTD
 ## Calculate co-Localization
+
 ## Calculate infiltration 
